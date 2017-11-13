@@ -3,31 +3,124 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* multi-purpose buffer size */
+//#define DEBUG 1
+
 #define BUFFER_MAX 50
+#define BUFFER_ENTITY_MAX 50
+
+enum {
+    NORMAL,
+    TAG_NAME,
+    TAG_ATTR,
+} mode = NORMAL;
+
+/* was last printed character \n? */
+bool lastwasnl = true;
+
+void emit(char c) {
+#ifdef DEBUG
+    fprintf(stderr, "emit: %c\n", c);
+#endif
+    putchar(c);
+    lastwasnl = (c == '\n');
+}
+
+void emit_nl() {
+#ifdef DEBUG
+    fprintf(stderr, "emit: newline\n");
+#endif
+    putchar('\n');
+    lastwasnl = true;
+}
+
+bool read_entity(bool inbody) {
+#ifdef DEBUG
+    fprintf(stderr, "read_entity(%s);\n", inbody ? "true" : "false");
+#endif
+    char buffer[BUFFER_ENTITY_MAX];
+    int ptr = 0;
+    int c;
+    while ((c = getchar()) != EOF) {
+        switch (c) {
+        case '\t':
+        case '\n':
+        case '\v':
+        case '\f':
+        case '\r':
+        case ' ':
+        case ';':
+            if (ptr >= BUFFER_ENTITY_MAX)
+                return false;
+            buffer[ptr] = 0;
+#ifdef DEBUG
+            fprintf(stderr, "&%s;\n", buffer);
+#endif
+            if (inbody) {
+                if (buffer[0] == 0) {
+                    return false;
+                } else if (!strcmp(buffer, "amp")) {
+                    emit('&');
+                } else if (!strcmp(buffer, "apos")) {
+                    emit('\'');
+                } else if (!strcmp(buffer, "gt")) {
+                    emit('>');
+                } else if (!strcmp(buffer, "lt")) {
+                    emit('<');
+                } else if (!strcmp(buffer, "nbsp")) {
+                    emit(' ');
+                } else if (!strcmp(buffer, "quot")) {
+                    emit('"');
+                } else if (buffer[0] == '#') {
+                    if (buffer[1] == 0) {
+                        return false;
+                    } else if (buffer[1] == 'x') {
+                        /* TODO &#x123; */
+                    } else {
+                        emit(atoi(&buffer[1]));
+                    }
+                } else {
+                    /* TODO more */
+                }
+            }
+            mode = NORMAL;
+            return true;
+        default:
+            if (ptr >= BUFFER_ENTITY_MAX)
+                return false;
+            buffer[ptr++] = c;
+        }
+    }
+    return false;
+}
+
+bool read_comment() {
+#ifdef DEBUG
+    fprintf(stderr, "read_comment();\n");
+#endif
+    int c;
+    while ((c = getchar()) != EOF) {
+        if (c == '-') {
+            if (getchar() == '-') {
+                if (getchar() == '>') {
+                    mode = NORMAL;
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
 
 /* usage: wget -qO- 'http://www.ursbjoernschmidt.de/' | html | more */
 int main(int argc, char **argv) {
-    enum {
-        NORMAL,
-        ENTITY,
-        TAG_NAME,
-        TAG_ATTR,
-    } mode = NORMAL;
-    /* current content of c */
     int c;
-    /* last content of c */
     int lastc = 0;
-    /* multi-purpose buffer */
     char buffer[BUFFER_MAX];
-    /* multi-purpose buffer pointer */
     int ptr = 0;
     /* are we inside <body></body>? */
     bool inbody = false;
     /* do we have to collapse whitespace? */
     bool collapse = true;
-    /* was last printed character \n? */
-    bool lastwasnl = true;
     while ((c = getchar()) != EOF) {
         switch (mode) {
         case NORMAL:
@@ -44,68 +137,24 @@ int main(int argc, char **argv) {
                             lastc != '\v' && lastc != '\f' &&
                             lastc != '\r' && lastc != ' ' &&
                             lastc != '>') {
-                            putchar(' ');
-                            lastwasnl = false;
+                            emit(' ');
                         }
                     } else {
-                        putchar(c);
-                        lastwasnl = (c == '\n');
+                        emit(c);
                     }
                 }
                 break;
             case '&':
-                mode = ENTITY;
+                if (!read_entity(inbody))
+                    return EXIT_FAILURE;
                 break;
             case '<':
                 mode = TAG_NAME;
                 break;
             default:
                 if (inbody) {
-                    putchar(c);
-                    lastwasnl = false;
+                    emit(c);
                 }
-            }
-            break;
-        case ENTITY:
-            switch (c) {
-            case ';':
-                if (ptr >= BUFFER_MAX)
-                    return EXIT_FAILURE;
-                buffer[ptr] = 0;
-                // printf("&%s;\n", buffer);
-                if (inbody) {
-                    if (buffer[0] == 0) {
-                        return EXIT_FAILURE;
-                    } else if (!strcmp(buffer, "amp")) {
-                        putchar('&');
-                    } else if (!strcmp(buffer, "apos")) {
-                        putchar('\'');
-                    } else if (!strcmp(buffer, "gt")) {
-                        putchar('>');
-                    } else if (!strcmp(buffer, "lt")) {
-                        putchar('<');
-                    } else if (!strcmp(buffer, "quot")) {
-                        putchar('"');
-                    } else if (buffer[0] == '#') {
-                        if (buffer[1] == 0) {
-                            return EXIT_FAILURE;
-                        } else if (buffer[1] == 'x') {
-                            /* TODO &#x123; */
-                        } else {
-                            putchar(atoi(&buffer[1]));
-                        }
-                    } else {
-                        /* TODO more */
-                    }
-                    lastwasnl = false;
-                }
-                ptr = 0;
-                mode = NORMAL;
-                break;
-            default:
-                if (ptr >= BUFFER_MAX)
-                    return EXIT_FAILURE;
-                buffer[ptr++] = c;
             }
             break;
         case TAG_NAME:
@@ -115,7 +164,9 @@ int main(int argc, char **argv) {
                 if (ptr >= BUFFER_MAX)
                     return EXIT_FAILURE;
                 buffer[ptr] = 0;
-                // printf("<%s>\n", buffer);
+#ifdef DEBUG
+                fprintf(stderr, "<%s>\n", buffer);
+#endif
                 if (!strcmp(buffer, "a")) {
                     // TODO print href
                     // printf("<%s> ", href);
@@ -136,8 +187,7 @@ int main(int argc, char **argv) {
                         if (!strcmp(buffer, "br") ||
                             (buffer[0] != '/' && !lastwasnl) ||
                             buffer[0] == '/') {
-                            putchar('\n');
-                            lastwasnl = true;
+                            emit_nl();
                         }
                     }
                 } else if (!strcmp(buffer, "code") ||
@@ -146,16 +196,16 @@ int main(int argc, char **argv) {
                 } else if (!strcmp(buffer, "/code") ||
                            !strcmp(buffer, "/pre")) {
                     if (inbody) {
-                        putchar('\n');
-                        lastwasnl = true;
+                        emit_nl();
                     }
                     collapse = true;
                 } else if (!strcmp(buffer, "hr")) {
                     if (inbody) {
                         if (!lastwasnl)
-                            putchar('\n');
-                        printf("-------------------------\n");
-                        lastwasnl = true;
+                            emit_nl();
+                        for (int i = 0; i < 25; i++)
+                            emit('-');
+                        emit_nl();
                     }
                 }
                 ptr = 0;
@@ -171,7 +221,14 @@ int main(int argc, char **argv) {
                             return EXIT_FAILURE;
                         buffer[ptr++] = c;
                     } else {
-                        mode = TAG_ATTR;
+                        buffer[ptr] = 0;
+                        if (!strcmp(buffer, "!--")) {
+                            if (!read_comment())
+                                return EXIT_FAILURE;
+                            ptr = 0;
+                        } else {
+                            mode = TAG_ATTR;
+                        }
                     }
                 }
             }
@@ -180,6 +237,6 @@ int main(int argc, char **argv) {
         lastc = c;
     }
     if (!lastwasnl)
-        putchar('\n');
+        emit_nl();
     return EXIT_SUCCESS;
 }
