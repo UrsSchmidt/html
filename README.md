@@ -1,2 +1,2 @@
 # html
-A lightweight html viewer for the command line.
+`html` is a lightweight html viewer for the command line.
