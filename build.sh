@@ -1,3 +1,3 @@
 #!/bin/sh
 
-gcc -std=c11 -Wall -Wpedantic -o 'html' 'src/html.c'
+gcc -std=c18 -Wall -Wpedantic -o 'html' 'src/html.c'
