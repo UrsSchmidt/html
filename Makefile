@@ -1,4 +1,5 @@
-HTML=html
+TITLE=html
+TARGET_EXEC=$(TITLE)
 
 # build target
 
@@ -8,13 +9,13 @@ CC=gcc
 CFLAGS=-std=c18 -Wall -Wpedantic
 LDLIBS=
 
-$(HTML): $(SRC)/$(HTML).c
-	$(CC) $(CFLAGS) -o $(HTML) $(SRC)/$(HTML).c $(LDLIBS)
+$(TARGET_EXEC): $(SRC)/$(TITLE).c
+	$(CC) $(CFLAGS) -o $@ $(SRC)/$(TITLE).c $(LDLIBS)
 
 # install/uninstall targets
 
-FILE_BIN=$(HTML)
-FILE_MAN=$(HTML).1
+FILE_BIN=$(TARGET_EXEC)
+FILE_MAN=$(TITLE).1
 INSTALL_DIR_BIN=/usr/local/bin/
 INSTALL_DIR_MAN=/usr/local/share/man/man1/
 INSTALL_PATH_BIN=$(INSTALL_DIR_BIN)$(FILE_BIN)
@@ -48,4 +49,4 @@ endif
 
 .PHONY: clean
 clean:
-	rm -f $(HTML)
+	rm -f $(TARGET_EXEC)
